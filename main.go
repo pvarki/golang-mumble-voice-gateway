@@ -87,11 +87,34 @@ func loadConfig() (Config, error) {
 	}, nil
 }
 
-func newMux(gateway http.Handler) *http.ServeMux {
+func newMux(gateway, ready http.Handler) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.Handle("GET /ws", gateway)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
+	mux.Handle("GET /readyz", ready)
 	return mux
+}
+
+// readyz answers mumblermapi's health check: 204 once this pod's Linkerd proxy is ready at proxyReady, without which
+// Traefik's identity never reaches the gateway and every browser is refused; an empty proxyReady is not checked.
+// Murmur is never dialled for it: every browser's session comes from this pod's address, and Murmur bans an
+// address that connects too often.
+func readyz(proxyReady string, client *http.Client) http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {
+		if proxyReady != "" {
+			resp, err := client.Get(proxyReady)
+			if err != nil {
+				http.Error(w, "no Linkerd proxy", http.StatusServiceUnavailable)
+				return
+			}
+			_ = resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				http.Error(w, "Linkerd proxy not ready", http.StatusServiceUnavailable)
+				return
+			}
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
 }
 
 func main() {
@@ -108,7 +131,7 @@ func main() {
 	}
 	server := &http.Server{
 		Addr:              env("GATEWAY_LISTEN", ":8080"),
-		Handler:           newMux(gateway),
+		Handler:           newMux(gateway, readyz(env("GATEWAY_PROXY_READY", "http://127.0.0.1:4191/ready"), &http.Client{Timeout: time.Second})),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	log.Info("voice gateway listening", "addr", server.Addr, "murmur", cfg.MurmurAddr)

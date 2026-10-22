@@ -28,6 +28,11 @@ saw be replayed within their 60 seconds.
 | `GATEWAY_CERT`, `GATEWAY_KEY` | The gateway's client certificate, default `/certs/tls.{crt,key}`; read for every session, so a renewed one needs no restart |
 | `GATEWAY_TRAEFIK_IDENTITY` | Traefik's Linkerd identity |
 | `GATEWAY_LISTEN` | Default `:8080` |
+| `GATEWAY_PROXY_READY` | This pod's Linkerd proxy readiness, default `http://127.0.0.1:4191/ready`; empty skips it |
+
+It serves `GET /ws`, the browsers' sessions; `GET /healthz`, liveness for the kubelet; and `GET /readyz`, 204
+once the pod's Linkerd proxy is ready, for mumblermapi's health check. `/readyz` never dials Murmur, which bans
+an address that connects too often.
 
 ## Development
 

@@ -149,7 +149,7 @@ func (w *world) gatewayServer(t *testing.T, murmurAddr string) *httptest.Server 
 	if err != nil {
 		t.Fatal(err)
 	}
-	server := httptest.NewServer(newMux(g))
+	server := httptest.NewServer(newMux(g, http.NotFoundHandler()))
 	t.Cleanup(server.Close)
 	return server
 }
@@ -437,9 +437,36 @@ func TestNewGatewayWantsAnHTTPSOrigin(t *testing.T) {
 
 func TestHealthz(t *testing.T) {
 	rec := httptest.NewRecorder()
-	newMux(http.NotFoundHandler()).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+	newMux(http.NotFoundHandler(), http.NotFoundHandler()).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/healthz", nil))
 	if rec.Code != http.StatusNoContent {
 		t.Fatal(rec.Code)
+	}
+}
+
+func TestReadyzFollowsTheProxy(t *testing.T) {
+	status := http.StatusOK
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(status) }))
+	gone := httptest.NewServer(http.NotFoundHandler())
+	gone.Close() // nothing listens there: a pod the injector missed
+	defer proxy.Close()
+	ask := func(proxyReady string) int {
+		rec := httptest.NewRecorder()
+		mux := newMux(http.NotFoundHandler(), readyz(proxyReady, &http.Client{Timeout: time.Second}))
+		mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+		return rec.Code
+	}
+	if code := ask(proxy.URL); code != http.StatusNoContent {
+		t.Fatal("ready proxy:", code)
+	}
+	status = http.StatusServiceUnavailable
+	if code := ask(proxy.URL); code != http.StatusServiceUnavailable {
+		t.Fatal("proxy not ready:", code)
+	}
+	if code := ask(gone.URL); code != http.StatusServiceUnavailable {
+		t.Fatal("no proxy:", code)
+	}
+	if code := ask(""); code != http.StatusNoContent {
+		t.Fatal("unchecked:", code)
 	}
 }
 
