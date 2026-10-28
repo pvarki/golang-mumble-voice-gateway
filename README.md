@@ -23,7 +23,7 @@ saw be replayed within their 60 seconds.
 | Variable                      | Meaning                                                                                                                     |
 | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
 | `GATEWAY_ORIGIN`              | The only page origin allowed, `https://mtls.<domain>` (required)                                                            |
-| `GATEWAY_MURMUR_NAME`         | The name on Murmur's certificate, `tak.<domain>` (required)                                                                 |
+| `GATEWAY_MURMUR_NAME`         | The name on Murmur's certificate, `mumble.<domain>` (required)                                                              |
 | `GATEWAY_MURMUR_ADDR`         | Murmur's address, default `murmur.app-mumble.svc.cluster.local:64738`                                                       |
 | `GATEWAY_MURMUR_CA`           | CAs for Murmur's certificate, default `/trust/ca-cert.pem`                                                                  |
 | `GATEWAY_CERT`, `GATEWAY_KEY` | The gateway's client certificate, default `/certs/tls.{crt,key}`; read for every session, so a renewed one needs no restart |
