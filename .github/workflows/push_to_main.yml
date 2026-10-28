@@ -1,0 +1,45 @@
+name: Tag, release and publish
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - uses: pvarki/config-ci-library/.github/actions/tag-release@5a0c4ca0d9e53135ea5ed3427840641d4ccb6aa2 # v0.14.2+261026
+        id: tag
+      - uses: pvarki/config-ci-library/.github/actions/release-notes@5a0c4ca0d9e53135ea5ed3427840641d4ccb6aa2 # v0.14.2+261026
+        if: steps.tag.outputs.tag != ''
+        with:
+          ref: ${{ steps.tag.outputs.tag }}
+          release: ${{ steps.tag.outputs.version }}
+          product: voice-gateway
+          attach-to-release: "true"
+
+  publish:
+    needs: release
+    runs-on: arc-runner-set
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: pvarki/config-ci-library/.github/actions/publish-image@5a0c4ca0d9e53135ea5ed3427840641d4ccb6aa2 # v0.14.2+261026
+        with:
+          product: voice-gateway
+          component: server
+          dockerhub-username: ${{ vars.DOCKERHUB_USERNAME }}
+          dockerhub-token: ${{ secrets.DOCKERHUB_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          acr-repo: ${{ vars.ACR_REPO }}
+          acr-username: ${{ vars.ACR_USERNAME }}
+          acr-token: ${{ secrets.ACR_TOKEN }}

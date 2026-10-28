@@ -1,6 +1,7 @@
-# voice-gateway
+# golang-mumble-voice-gateway
 
-Lets browsers into Murmur (VOICE-PLAN §4.10, "b2"). Browsers cannot speak Mumble's TLS with a client
+The voice gateway of `pvarki/python-mumble-rmapi`; opendefence-platform deploys it in `k8s/app-mumble`. It lets
+browsers into Murmur (VOICE-PLAN §4.10, "b2"). Browsers cannot speak Mumble's TLS with a client
 certificate, so the gateway speaks it for them over a WebSocket at `mtls.<domain>/ui/mumble/ws`.
 
 1. Traefik verifies the browser's client certificate and forwards it in `X-Forwarded-Tls-Client-Cert`.
@@ -19,16 +20,16 @@ saw be replayed within their 60 seconds.
 
 ## Configuration
 
-| Variable | Meaning |
-|---|---|
-| `GATEWAY_ORIGIN` | The only page origin allowed, `https://mtls.<domain>` (required) |
-| `GATEWAY_MURMUR_NAME` | The name on Murmur's certificate, `tak.<domain>` (required) |
-| `GATEWAY_MURMUR_ADDR` | Murmur's address, default `murmur.app-mumble.svc.cluster.local:64738` |
-| `GATEWAY_MURMUR_CA` | CAs for Murmur's certificate, default `/trust/ca-cert.pem` |
+| Variable                      | Meaning                                                                                                                     |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `GATEWAY_ORIGIN`              | The only page origin allowed, `https://mtls.<domain>` (required)                                                            |
+| `GATEWAY_MURMUR_NAME`         | The name on Murmur's certificate, `tak.<domain>` (required)                                                                 |
+| `GATEWAY_MURMUR_ADDR`         | Murmur's address, default `murmur.app-mumble.svc.cluster.local:64738`                                                       |
+| `GATEWAY_MURMUR_CA`           | CAs for Murmur's certificate, default `/trust/ca-cert.pem`                                                                  |
 | `GATEWAY_CERT`, `GATEWAY_KEY` | The gateway's client certificate, default `/certs/tls.{crt,key}`; read for every session, so a renewed one needs no restart |
-| `GATEWAY_TRAEFIK_IDENTITY` | Traefik's Linkerd identity |
-| `GATEWAY_LISTEN` | Default `:8080` |
-| `GATEWAY_PROXY_READY` | This pod's Linkerd proxy readiness, default `http://127.0.0.1:4191/ready`; empty skips it |
+| `GATEWAY_TRAEFIK_IDENTITY`    | Traefik's Linkerd identity                                                                                                  |
+| `GATEWAY_LISTEN`              | Default `:8080`                                                                                                             |
+| `GATEWAY_PROXY_READY`         | This pod's Linkerd proxy readiness, default `http://127.0.0.1:4191/ready`; empty skips it                                   |
 
 It serves `GET /ws`, the browsers' sessions; `GET /healthz`, liveness for the kubelet; and `GET /readyz`, 204
 once the pod's Linkerd proxy is ready, for mumblermapi's health check. `/readyz` never dials Murmur, which bans
@@ -37,6 +38,6 @@ an address that connects too often.
 ## Development
 
 ```bash
-task test:go
-docker buildx build --load -t voice-gateway:dev voice-gateway
+go test -race ./...
+docker buildx build --load -t voice-gateway:dev .
 ```

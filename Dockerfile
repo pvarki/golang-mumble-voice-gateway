@@ -9,7 +9,7 @@ COPY *.go ./
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w" -o /voice-gateway .
 
 # No shell, no package manager: the gateway faces browsers.
-FROM gcr.io/distroless/static-debian12:nonroot
+FROM gcr.io/distroless/static-debian12:nonroot AS production
 COPY --from=build /voice-gateway /voice-gateway
 USER 65532:65532
 ENTRYPOINT ["/voice-gateway"]
