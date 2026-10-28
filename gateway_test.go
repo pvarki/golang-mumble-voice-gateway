@@ -253,16 +253,16 @@ func TestSessionLogsInWithTheTicketAndRelaysBothWays(t *testing.T) {
 		t.Fatalf("authenticate %d %v", kind, fields)
 	}
 
-	if _, err := murmur.Write(frame(5, []byte("sync"))); err != nil { // ServerSync
+	if _, err := murmur.Write(mustFrame(5, []byte("sync"))); err != nil { // ServerSync
 		t.Fatal(err)
 	}
 	msgKind, msg, err := conn.Read(ctx)
-	if err != nil || msgKind != websocket.MessageBinary || !bytes.Equal(msg, frame(5, []byte("sync"))) {
+	if err != nil || msgKind != websocket.MessageBinary || !bytes.Equal(msg, mustFrame(5, []byte("sync"))) {
 		t.Fatalf("browser got %v %v %v", msgKind, msg, err)
 	}
 
 	for _, k := range []uint16{msgPing, msgUDPTunnel, msgUserState, msgPermissionQuery, msgRequestBlob} {
-		if err := conn.Write(ctx, websocket.MessageBinary, frame(k, []byte{1, 2})); err != nil {
+		if err := conn.Write(ctx, websocket.MessageBinary, mustFrame(k, []byte{1, 2})); err != nil {
 			t.Fatal(err)
 		}
 		if got, payload := readFrame(t, murmur); got != k || !bytes.Equal(payload, []byte{1, 2}) {
@@ -273,12 +273,12 @@ func TestSessionLogsInWithTheTicketAndRelaysBothWays(t *testing.T) {
 
 func TestBrowserCannotAuthenticateAgainOrSendOtherTypes(t *testing.T) {
 	for _, msg := range [][]byte{
-		frame(msgAuthenticate, authenticateMessage("BRAVO_2---web-1", "x")),
-		frame(msgVersion, nil),
-		frame(11, []byte("text")),      // TextMessage
-		frame(msgPing, []byte{1})[:6],  // header claims a byte it lacks
-		{0, 3},                         // shorter than a header
-		append(frame(msgPing, nil), 9), // trailing junk
+		mustFrame(msgAuthenticate, authenticateMessage("BRAVO_2---web-1", "x")),
+		mustFrame(msgVersion, nil),
+		mustFrame(11, []byte("text")),      // TextMessage
+		mustFrame(msgPing, []byte{1})[:6],  // header claims a byte it lacks
+		{0, 3},                             // shorter than a header
+		append(mustFrame(msgPing, nil), 9), // trailing junk
 	} {
 		w := newWorld(t)
 		addr, conns := w.fakeMurmur(t)
@@ -420,7 +420,7 @@ func TestMurmurUnreachableOrClosing(t *testing.T) {
 	_ = conn.Write(ctx, websocket.MessageText, []byte(ticketFor("ALPHA_1---web-1", w.user.der)))
 	murmur = <-conns
 	readFrame(t, murmur)
-	_, _ = murmur.Write(frame(5, []byte("abc"))[:7]) // cut off mid-message
+	_, _ = murmur.Write(mustFrame(5, []byte("abc"))[:7]) // cut off mid-message
 	_ = murmur.Close()
 	if _, _, err := conn.Read(ctx); websocket.CloseStatus(err) != websocket.StatusNormalClosure {
 		t.Fatalf("murmur closed: %v", err)
@@ -612,8 +612,26 @@ func TestBrowserMessagesStaySmall(t *testing.T) {
 	defer func() { _ = murmur.Close() }()
 	readFrame(t, murmur)
 	readFrame(t, murmur)
-	_ = conn.Write(ctx, websocket.MessageBinary, frame(msgUDPTunnel, make([]byte, maxBrowser)))
+	_ = conn.Write(ctx, websocket.MessageBinary, mustFrame(msgUDPTunnel, make([]byte, maxBrowser)))
 	if _, _, err := conn.Read(ctx); websocket.CloseStatus(err) != websocket.StatusMessageTooBig {
 		t.Fatalf("oversized message: %v", err)
+	}
+}
+
+// mustFrame frames a test message, which is never over maxFrame
+func mustFrame(kind uint16, payload []byte) []byte {
+	msg, err := frame(kind, payload)
+	if err != nil {
+		panic(err)
+	}
+	return msg
+}
+
+func TestFrameRefusesOversizedMessages(t *testing.T) {
+	if _, err := frame(msgPing, make([]byte, maxFrame+1)); err == nil {
+		t.Fatal("a message over maxFrame was framed")
+	}
+	if _, err := loginMessages("BRAVO_2---web-1", strings.Repeat("x", maxFrame)); err == nil {
+		t.Fatal("a login over maxFrame was framed")
 	}
 }

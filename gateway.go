@@ -193,7 +193,10 @@ func (g *Gateway) session(ctx context.Context, conn *websocket.Conn, leaf []byte
 	}
 	murmur := raw.(*tls.Conn)
 	defer func() { _ = murmur.Close() }()
-	login := append(frame(msgVersion, versionMessage()), frame(msgAuthenticate, authenticateMessage(c.Username, ticket))...)
+	login, err := loginMessages(c.Username, ticket)
+	if err != nil {
+		return fmt.Errorf("log in: %w", err)
+	}
 	if _, err := murmur.Write(login); err != nil {
 		return fmt.Errorf("log in: %w", err)
 	}
@@ -255,11 +258,28 @@ func toMurmur(ctx context.Context, conn *websocket.Conn, murmur io.Writer) error
 	}
 }
 
-func frame(kind uint16, payload []byte) []byte {
-	msg := make([]byte, headerLen, headerLen+len(payload))
+func frame(kind uint16, payload []byte) ([]byte, error) {
+	n := len(payload)
+	if n > maxFrame {
+		return nil, fmt.Errorf("message type %d is %d bytes, over %d", kind, n, maxFrame)
+	}
+	msg := make([]byte, headerLen, headerLen+n)
 	binary.BigEndian.PutUint16(msg, kind)
-	binary.BigEndian.PutUint32(msg[2:], uint32(len(payload)))
-	return append(msg, payload...)
+	binary.BigEndian.PutUint32(msg[2:], uint32(n))
+	return append(msg, payload...), nil
+}
+
+// loginMessages are Version and Authenticate, logging in with the ticket as the password
+func loginMessages(username, ticket string) ([]byte, error) {
+	version, err := frame(msgVersion, versionMessage())
+	if err != nil {
+		return nil, err
+	}
+	auth, err := frame(msgAuthenticate, authenticateMessage(username, ticket))
+	if err != nil {
+		return nil, err
+	}
+	return append(version, auth...), nil
 }
 
 // Protobuf, by hand: the gateway writes two messages and parses none.
@@ -271,12 +291,12 @@ func pbVarint(b []byte, v uint64) []byte {
 	return append(b, byte(v))
 }
 
-func pbUint(b []byte, field int, v uint64) []byte {
-	return pbVarint(pbVarint(b, uint64(field<<3)), v)
+func pbUint(b []byte, field, v uint64) []byte {
+	return pbVarint(pbVarint(b, field<<3), v)
 }
 
-func pbString(b []byte, field int, s string) []byte {
-	b = pbVarint(b, uint64(field<<3|2))
+func pbString(b []byte, field uint64, s string) []byte {
+	b = pbVarint(b, field<<3|2)
 	return append(pbVarint(b, uint64(len(s))), s...)
 }
 
